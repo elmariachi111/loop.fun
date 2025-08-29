@@ -35,7 +35,7 @@ const videoMimeTypes = [
   'video/x-ms-wmv'
 ];
 
-// Multer configuration for video uploads
+// Multer configuration for streaming video uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -60,8 +60,11 @@ const upload = multer({
   fileFilter,
   limits: {
     fileSize: 500 * 1024 * 1024, // 500MB limit
-    files: 1 // Only one file at a time
-  }
+    files: 1, // Only one file at a time
+    fieldSize: 10 * 1024 * 1024 // 10MB field size limit for metadata
+  },
+  // Enable streaming for large files
+  preservePath: false
 });
 
 // Types
@@ -99,7 +102,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Upload video endpoint
+// Upload video endpoint with streaming support
 app.post('/api/videos/upload', upload.single('video'), (req, res) => {
   try {
     if (!req.file) {
@@ -124,9 +127,17 @@ app.post('/api/videos/upload', upload.single('video'), (req, res) => {
     // Store metadata (in production, save to database)
     videoDatabase.push(videoMetadata);
 
+    // Log successful upload with file size
+    console.log(`✅ Video uploaded successfully:`, {
+      videoId: videoMetadata.id,
+      originalName: videoMetadata.originalName,
+      size: `${(videoMetadata.size / 1024 / 1024).toFixed(2)} MB`,
+      mimeType: videoMetadata.mimeType
+    });
+
     const response: VideoUploadResponse = {
       success: true,
-      message: 'Video uploaded successfully',
+      message: `Video uploaded successfully. File size: ${(videoMetadata.size / 1024 / 1024).toFixed(2)} MB`,
       data: {
         videoId: videoMetadata.id,
         filename: videoMetadata.filename,

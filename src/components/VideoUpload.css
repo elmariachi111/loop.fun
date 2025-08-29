@@ -1,0 +1,227 @@
+.video-upload {
+  margin: 20px 0;
+}
+
+.upload-section {
+  background: rgba(30, 30, 46, 0.9);
+  backdrop-filter: blur(20px);
+  padding: 30px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.1);
+}
+
+.upload-section h3 {
+  color: #a78bfa;
+  font-size: 18px;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.file-input-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.file-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.file-input-label {
+  display: block;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(167, 139, 250, 0.1));
+  border: 2px dashed #667eea;
+  border-radius: 8px;
+  color: #e2e8f0;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.file-input-label:hover {
+  border-color: #a78bfa;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(167, 139, 250, 0.2));
+  color: #ffffff;
+}
+
+.file-input:disabled + .file-input-label {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-color: #4a5568;
+}
+
+.file-info {
+  background: rgba(102, 126, 234, 0.05);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.file-info p {
+  color: #cbd5e0;
+  font-size: 13px;
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
+.file-info p:last-child {
+  margin-bottom: 0;
+}
+
+.file-info strong {
+  color: #a78bfa;
+}
+
+.progress-section {
+  margin-bottom: 20px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(74, 85, 104, 0.5);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  background-size: 200% 100%;
+  animation: progress-shimmer 2s infinite;
+}
+
+@keyframes progress-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.progress-text {
+  color: #a78bfa;
+  font-size: 12px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.upload-btn {
+  width: 100%;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-bottom: 20px;
+}
+
+.upload-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5a67d8, #6b46c1);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  transform: translateY(-2px);
+}
+
+.upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.error-message {
+  background: rgba(220, 38, 127, 0.1);
+  border: 1px solid rgba(220, 38, 127, 0.3);
+  border-radius: 6px;
+  padding: 15px;
+  color: #fbb6ce;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.error-message strong {
+  color: #ed64a6;
+}
+
+.success-message {
+  background: rgba(72, 187, 120, 0.1);
+  border: 1px solid rgba(72, 187, 120, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.success-message h4 {
+  color: #68d391;
+  font-size: 16px;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.upload-details {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.upload-details p {
+  color: #e2e8f0;
+  font-size: 13px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.upload-details p:last-child {
+  margin-bottom: 0;
+}
+
+.upload-details strong {
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+.upload-details code {
+  background: rgba(102, 126, 234, 0.2);
+  color: #cbd5e0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+@media (max-width: 768px) {
+  .upload-section {
+    padding: 20px;
+  }
+  
+  .upload-section h3 {
+    font-size: 16px;
+  }
+  
+  .file-input-label {
+    padding: 12px 15px;
+    font-size: 13px;
+  }
+  
+  .upload-btn {
+    padding: 12px 16px;
+    font-size: 13px;
+  }
+}

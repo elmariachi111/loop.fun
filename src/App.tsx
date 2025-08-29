@@ -1,4 +1,6 @@
 import './App.css'
+import VideoUpload from './components/VideoUpload'
+import './components/VideoUpload.css'
 
 function App() {
   return (
@@ -48,6 +50,8 @@ function App() {
               <button className="btn-secondary">BROWSE VIDEOS</button>
             </div>
           </div>
+          
+          <VideoUpload />
         </div>
       </main>
 
