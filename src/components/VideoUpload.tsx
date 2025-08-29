@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { videoEndpoints } from '../config/api';
 
 interface UploadResponse {
@@ -26,6 +28,7 @@ interface UploadState {
   result: UploadResponse | null;
   error: string | null;
   splitVideos: VideoSplit | null;
+  ffmpegLoading: boolean;
 }
 
 const VideoUpload = () => {
@@ -34,7 +37,8 @@ const VideoUpload = () => {
     progress: 0,
     result: null,
     error: null,
-    splitVideos: null
+    splitVideos: null,
+    ffmpegLoading: false
   });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +46,44 @@ const VideoUpload = () => {
   const [numberOfParts, setNumberOfParts] = useState<number>(2);
   const [videoUrls, setVideoUrls] = useState<string[]>([]);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
+
+  // Initialize FFmpeg
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      setUploadState(prev => ({ ...prev, ffmpegLoading: true }));
+      
+      try {
+        const ffmpeg = ffmpegRef.current;
+        
+        // Try a more direct approach that works better with modern browsers
+        await ffmpeg.load();
+        
+        setUploadState(prev => ({ ...prev, ffmpegLoading: false }));
+      } catch (error) {
+        console.error('Failed to load FFmpeg:', error);
+        
+        // Fallback with explicit URLs
+        try {
+          await ffmpeg.load({
+            coreURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.js', 'text/javascript'),
+            wasmURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.wasm', 'application/wasm'),
+          });
+          
+          setUploadState(prev => ({ ...prev, ffmpegLoading: false }));
+        } catch (fallbackError) {
+          console.error('Fallback FFmpeg loading also failed:', fallbackError);
+          setUploadState(prev => ({ 
+            ...prev, 
+            ffmpegLoading: false,
+            error: 'Failed to load video processing library. This browser may not support the required features.'
+          }));
+        }
+      }
+    };
+    
+    loadFFmpeg();
+  }, []);
 
   // Cleanup object URLs when component unmounts or when splitVideos changes
   useEffect(() => {
@@ -110,113 +152,100 @@ const VideoUpload = () => {
   };
 
   const splitVideoLocally = async (file: File, numParts: number): Promise<{ parts: Blob[]; partNames: string[] }> => {
-    return new Promise((resolve, reject) => {
+    const ffmpeg = ffmpegRef.current;
+    const parts: Blob[] = [];
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+    const partNames: string[] = [];
+
+    try {
+      // Write input file to FFmpeg filesystem
+      await ffmpeg.writeFile('input.mp4', await fetchFile(file));
+      
+      // Get video duration first
+      await ffmpeg.exec(['-i', 'input.mp4', '-f', 'null', '-']);
+      
+      // Create a temporary video to get metadata
       const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d')!;
-      
-      video.onloadedmetadata = () => {
-        const duration = video.duration;
-        const partDuration = duration / numParts;
-        
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        
-        const stream = canvas.captureStream(30); // 30 FPS
-        
-        const parts: Blob[] = [];
-        const baseName = file.name.replace(/\.[^/.]+$/, "");
-        const partNames: string[] = [];
-        
-        let currentPartIndex = 0;
-        
-        const recordPart = (partIndex: number) => {
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-          const partData: Blob[] = [];
-          let isReverse = false;
-          
-          const startTime = 0; // Always start from beginning
-          const endTime = (partIndex + 1) * partDuration;
-          
-          recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-              partData.push(event.data);
-            }
-          };
-          
-          recorder.onstop = () => {
-            const partBlob = new Blob(partData, { type: 'video/webm' });
-            parts[partIndex] = partBlob;
-            partNames[partIndex] = `${baseName}_part${partIndex + 1}.webm`;
-            
-            // Record next part or finish
-            if (partIndex + 1 < numParts) {
-              recordPart(partIndex + 1);
-            } else {
-              resolve({ parts, partNames });
-            }
-          };
-          
-          // Set video to start position and wait for seek
-          video.currentTime = startTime;
-          video.pause();
-          
-          const startRecording = () => {
-            // Double-check position
-            if (Math.abs(video.currentTime - startTime) > 0.1) {
-              video.currentTime = startTime;
-              setTimeout(startRecording, 50);
-              return;
-            }
-            
-            // Draw the first frame before starting
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            video.play();
-            recorder.start();
-            drawPart();
-          };
-          
-          video.onseeked = () => {
-            video.onseeked = null;
-            setTimeout(startRecording, 100);
-          };
-          
-          // Draw frames for this part - forward then backward
-          const drawPart = () => {
-            if (!isReverse) {
-              // Forward playback
-              if (video.currentTime < endTime - 0.033 && !video.ended) {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                requestAnimationFrame(drawPart);
-              } else {
-                // Switch to reverse
-                isReverse = true;
-                video.currentTime = endTime - 0.033;
-                video.pause();
-                drawReverse();
-              }
-            }
-          };
-          
-          const drawReverse = () => {
-            if (video.currentTime > 0) { // Go back to beginning (0) instead of startTime
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              video.currentTime -= 0.033;
-              requestAnimationFrame(drawReverse);
-            } else {
-              recorder.stop();
-            }
-          };
-        };
-        
-        // Start recording first part
-        recordPart(0);
-      };
-      
-      video.onerror = () => reject(new Error('Failed to load video'));
       video.src = URL.createObjectURL(file);
-    });
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve;
+      });
+      
+      const duration = video.duration;
+      const partDuration = duration / numParts;
+      
+      URL.revokeObjectURL(video.src);
+      
+      // Process each part
+      for (let i = 0; i < numParts; i++) {
+        const endTime = (i + 1) * partDuration;
+        const outputFilename = `part_${i + 1}.mp4`;
+        
+        // Create ping-pong effect: extract from start to endTime, then reverse and concatenate
+        
+        // Step 1: Extract the segment from start to endTime
+        await ffmpeg.exec([
+          '-i', 'input.mp4',
+          '-ss', '0',
+          '-t', endTime.toString(),
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-avoid_negative_ts', 'make_zero',
+          `segment_${i + 1}.mp4`
+        ]);
+        
+        // Step 2: Create reversed version
+        await ffmpeg.exec([
+          '-i', `segment_${i + 1}.mp4`,
+          '-vf', 'reverse',
+          '-af', 'areverse',
+          `reversed_${i + 1}.mp4`
+        ]);
+        
+        // Step 3: Create concat file for combining forward and reverse
+        const concatContent = `file 'segment_${i + 1}.mp4'\nfile 'reversed_${i + 1}.mp4'`;
+        await ffmpeg.writeFile(`concat_${i + 1}.txt`, concatContent);
+        
+        // Step 4: Concatenate forward and reverse
+        await ffmpeg.exec([
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', `concat_${i + 1}.txt`,
+          '-c', 'copy',
+          outputFilename
+        ]);
+        
+        // Read the output file
+        const outputData = await ffmpeg.readFile(outputFilename);
+        const blob = new Blob([outputData], { type: 'video/mp4' });
+        
+        parts.push(blob);
+        partNames.push(`${baseName}_part${i + 1}.mp4`);
+        
+        // Update progress
+        const progress = 20 + Math.round((i + 1) / numParts * 60);
+        setUploadState(prev => ({ ...prev, progress }));
+        
+        // Clean up temporary files
+        try {
+          await ffmpeg.deleteFile(`segment_${i + 1}.mp4`);
+          await ffmpeg.deleteFile(`reversed_${i + 1}.mp4`);
+          await ffmpeg.deleteFile(`concat_${i + 1}.txt`);
+          await ffmpeg.deleteFile(outputFilename);
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+      
+      // Clean up input file
+      await ffmpeg.deleteFile('input.mp4');
+      
+      return { parts, partNames };
+      
+    } catch (error) {
+      console.error('FFmpeg processing error:', error);
+      throw new Error('Failed to process video with FFmpeg: ' + (error as Error).message);
+    }
   };
 
   const downloadBlob = (blob: Blob, filename: string) => {
@@ -344,24 +373,32 @@ const VideoUpload = () => {
           </div>
         </div>
 
-        {uploadState.uploading && (
+        {(uploadState.uploading || uploadState.ffmpegLoading) && (
           <div className="progress-section">
             <div className="progress-bar">
               <div 
                 className="progress-fill" 
-                style={{ width: `${uploadState.progress}%` }}
+                style={{ width: uploadState.ffmpegLoading ? '0%' : `${uploadState.progress}%` }}
               />
             </div>
-            <p className="progress-text">Splitting Video: {uploadState.progress}%</p>
+            <p className="progress-text">
+              {uploadState.ffmpegLoading 
+                ? 'Loading video processor...' 
+                : `Splitting Video: ${uploadState.progress}%`}
+            </p>
           </div>
         )}
 
         <button
           onClick={handleUpload}
-          disabled={!selectedFile || uploadState.uploading}
+          disabled={!selectedFile || uploadState.uploading || uploadState.ffmpegLoading}
           className="upload-btn"
         >
-          {uploadState.uploading ? 'Splitting Video...' : `Split Video Into ${numberOfParts} Parts`}
+          {uploadState.ffmpegLoading 
+            ? 'Loading Video Processor...' 
+            : uploadState.uploading 
+              ? 'Splitting Video...' 
+              : `Split Video Into ${numberOfParts} Parts`}
         </button>
 
         {uploadState.error && (
