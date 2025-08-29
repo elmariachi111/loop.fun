@@ -133,8 +133,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Upload video endpoint with streaming support
-app.post('/api/videos/upload', upload.single('video'), (req, res) => {
+// Upload video endpoint with automatic processing
+app.post('/api/videos/upload', upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -158,17 +158,19 @@ app.post('/api/videos/upload', upload.single('video'), (req, res) => {
     // Store metadata (in production, save to database)
     videoDatabase.push(videoMetadata);
 
-    // Log successful upload with file size
-    console.log(`✅ Video uploaded successfully:`, {
+    console.log(`✅ Video uploaded, starting processing:`, {
       videoId: videoMetadata.id,
       originalName: videoMetadata.originalName,
       size: `${(videoMetadata.size / 1024 / 1024).toFixed(2)} MB`,
       mimeType: videoMetadata.mimeType
     });
 
+    // Automatically process the video
+    await processVideo(req.file.path, videoId);
+
     const response: VideoUploadResponse = {
       success: true,
-      message: `Video uploaded successfully. File size: ${(videoMetadata.size / 1024 / 1024).toFixed(2)} MB`,
+      message: `Video processed successfully! Download will start automatically.`,
       data: {
         videoId: videoMetadata.id,
         filename: videoMetadata.filename,
@@ -181,11 +183,11 @@ app.post('/api/videos/upload', upload.single('video'), (req, res) => {
 
     res.status(201).json(response);
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('Upload/processing error:', error);
     res.status(500).json({
       success: false,
-      message: 'Internal server error during upload',
-      error: 'UPLOAD_FAILED'
+      message: 'Error processing video',
+      error: 'PROCESSING_FAILED'
     } as VideoUploadResponse);
   }
 });

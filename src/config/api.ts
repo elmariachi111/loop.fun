@@ -23,7 +23,9 @@ export const videoEndpoints = {
   get: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoGet}/${videoId}`),
   stream: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoStream}/${videoId}/stream`),
   list: () => buildApiUrl(apiConfig.endpoints.videoGet),
-  delete: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoDelete}/${videoId}`)
+  delete: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoDelete}/${videoId}`),
+  process: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoGet}/${videoId}/process`),
+  download: (videoId: string) => buildApiUrl(`${apiConfig.endpoints.videoGet}/${videoId}/download`)
 };
 
 export default apiConfig;

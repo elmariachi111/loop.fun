@@ -84,6 +84,7 @@ const VideoUpload = () => {
     setUploadState(prev => ({
       ...prev,
       uploading: true,
+      processing: false,
       progress: 0,
       error: null,
       result: null
@@ -111,13 +112,24 @@ const VideoUpload = () => {
         try {
           const response: UploadResponse = JSON.parse(xhr.responseText);
           
-          if (xhr.status === 201 && response.success) {
+          if (xhr.status === 201 && response.success && response.data?.videoId) {
+            // Video uploaded and processed successfully
             setUploadState(prev => ({
               ...prev,
               uploading: false,
+              processing: false,
               result: response,
               progress: 100
             }));
+            
+            // Automatically trigger download
+            const downloadUrl = videoEndpoints.download(response.data.videoId);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `video-${response.data.videoId}-processed.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
             
             // Reset file input
             setSelectedFile(null);
@@ -128,6 +140,7 @@ const VideoUpload = () => {
             setUploadState(prev => ({
               ...prev,
               uploading: false,
+              processing: false,
               error: response.message || 'Upload failed',
               progress: 0
             }));
@@ -136,6 +149,7 @@ const VideoUpload = () => {
           setUploadState(prev => ({
             ...prev,
             uploading: false,
+            processing: false,
             error: 'Invalid response from server',
             progress: 0
           }));
@@ -147,6 +161,7 @@ const VideoUpload = () => {
         setUploadState(prev => ({
           ...prev,
           uploading: false,
+          processing: false,
           error: 'Network error during upload',
           progress: 0
         }));
@@ -160,6 +175,7 @@ const VideoUpload = () => {
       setUploadState(prev => ({
         ...prev,
         uploading: false,
+        processing: false,
         error: error instanceof Error ? error.message : 'Upload failed',
         progress: 0
       }));
@@ -214,7 +230,7 @@ const VideoUpload = () => {
                 style={{ width: `${uploadState.progress}%` }}
               />
             </div>
-            <p className="progress-text">{uploadState.progress}%</p>
+            <p className="progress-text">Uploading & Processing: {uploadState.progress}%</p>
           </div>
         )}
 
@@ -223,7 +239,7 @@ const VideoUpload = () => {
           disabled={!selectedFile || uploadState.uploading}
           className="upload-btn"
         >
-          {uploadState.uploading ? 'Uploading...' : 'Upload Video'}
+          {uploadState.uploading ? 'Processing Video...' : 'Upload & Process Video'}
         </button>
 
         {uploadState.error && (
@@ -234,13 +250,11 @@ const VideoUpload = () => {
 
         {uploadState.result && uploadState.result.success && (
           <div className="success-message">
-            <h4>✅ Upload Successful!</h4>
+            <h4>✅ Video Processed Successfully!</h4>
+            <p>Your video has been split into two parts and the ZIP file should download automatically.</p>
             <div className="upload-details">
-              <p><strong>Video ID:</strong> <code>{uploadState.result.data?.videoId}</code></p>
               <p><strong>Original Name:</strong> {uploadState.result.data?.originalName}</p>
               <p><strong>File Size:</strong> {uploadState.result.data?.size ? formatFileSize(uploadState.result.data.size) : 'Unknown'}</p>
-              <p><strong>Type:</strong> {uploadState.result.data?.mimeType}</p>
-              <p><strong>Uploaded:</strong> {uploadState.result.data?.uploadedAt ? formatDate(uploadState.result.data.uploadedAt) : 'Unknown'}</p>
             </div>
           </div>
         )}
