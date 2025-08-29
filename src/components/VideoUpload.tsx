@@ -56,29 +56,21 @@ const VideoUpload = () => {
       try {
         const ffmpeg = ffmpegRef.current;
         
-        // Try a more direct approach that works better with modern browsers
-        await ffmpeg.load();
+        // Load from local assets
+        await ffmpeg.load({
+          coreURL: await toBlobURL('/ffmpeg/ffmpeg-core.js', 'text/javascript'),
+          wasmURL: await toBlobURL('/ffmpeg/ffmpeg-core.wasm', 'application/wasm'),
+          workerURL: await toBlobURL('/ffmpeg/ffmpeg-core.worker.js', 'text/javascript'),
+        });
         
         setUploadState(prev => ({ ...prev, ffmpegLoading: false }));
       } catch (error) {
         console.error('Failed to load FFmpeg:', error);
-        
-        // Fallback with explicit URLs
-        try {
-          await ffmpeg.load({
-            coreURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.js', 'text/javascript'),
-            wasmURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/esm/ffmpeg-core.wasm', 'application/wasm'),
-          });
-          
-          setUploadState(prev => ({ ...prev, ffmpegLoading: false }));
-        } catch (fallbackError) {
-          console.error('Fallback FFmpeg loading also failed:', fallbackError);
-          setUploadState(prev => ({ 
-            ...prev, 
-            ffmpegLoading: false,
-            error: 'Failed to load video processing library. This browser may not support the required features.'
-          }));
-        }
+        setUploadState(prev => ({ 
+          ...prev, 
+          ffmpegLoading: false,
+          error: 'Failed to load video processing library. Please refresh and try again.'
+        }));
       }
     };
     
