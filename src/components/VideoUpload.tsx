@@ -135,7 +135,7 @@ const VideoUpload = () => {
           const partData: Blob[] = [];
           let isReverse = false;
           
-          const startTime = partIndex * partDuration;
+          const startTime = 0; // Always start from beginning
           const endTime = (partIndex + 1) * partDuration;
           
           recorder.ondataavailable = (event) => {
@@ -200,7 +200,7 @@ const VideoUpload = () => {
           };
           
           const drawReverse = () => {
-            if (video.currentTime > startTime) {
+            if (video.currentTime > 0) { // Go back to beginning (0) instead of startTime
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               video.currentTime -= 0.033;
               requestAnimationFrame(drawReverse);
