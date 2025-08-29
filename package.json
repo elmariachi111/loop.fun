@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"npm run server:dev\"",
+    "dev": "concurrently \"vite\"",
     "build": "vite build",
     "build:full": "vite build && npm run server:build",
     "lint": "eslint .",

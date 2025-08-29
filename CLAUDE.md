@@ -1,0 +1,1 @@
+- At its base this project is a frontend application deployed on vercel. Its server directory contains a service that accepts video uploads. The server is deployed on fly.io.

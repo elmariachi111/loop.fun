@@ -6,6 +6,8 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import ffmpeg from 'fluent-ffmpeg';
+import archiver from 'archiver';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,6 +45,12 @@ app.use(express.json());
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Create processed directory for video processing outputs
+const processedDir = path.join(process.cwd(), 'processed');
+if (!fs.existsSync(processedDir)) {
+  fs.mkdirSync(processedDir, { recursive: true });
 }
 
 // Video MIME types validation
@@ -180,6 +188,149 @@ app.post('/api/videos/upload', upload.single('video'), (req, res) => {
       error: 'UPLOAD_FAILED'
     } as VideoUploadResponse);
   }
+});
+
+// Video processing function to split and re-encode video
+async function processVideo(inputPath: string, videoId: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const outputDir = path.join(processedDir, videoId);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
+    const part1Path = path.join(outputDir, 'part1.mp4');
+    const part2Path = path.join(outputDir, 'part2.mp4');
+    const zipPath = path.join(outputDir, 'processed.zip');
+
+    // First, get video duration
+    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+      if (err) {
+        console.error('Error getting video metadata:', err);
+        return reject(err);
+      }
+
+      const duration = metadata.format.duration;
+      if (!duration) {
+        return reject(new Error('Could not determine video duration'));
+      }
+
+      const halfDuration = duration / 2;
+
+      // Create first part (0 to halfway)
+      ffmpeg(inputPath)
+        .setStartTime(0)
+        .setDuration(halfDuration)
+        .output(part1Path)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .on('end', () => {
+          console.log('Part 1 processing finished');
+          
+          // Create second part (halfway to end)
+          ffmpeg(inputPath)
+            .setStartTime(halfDuration)
+            .output(part2Path)
+            .videoCodec('libx264')
+            .audioCodec('aac')
+            .on('end', () => {
+              console.log('Part 2 processing finished');
+              
+              // Create ZIP file
+              const output = fs.createWriteStream(zipPath);
+              const archive = archiver('zip', { zlib: { level: 9 } });
+
+              output.on('close', () => {
+                console.log('ZIP created:', archive.pointer() + ' total bytes');
+                resolve(zipPath);
+              });
+
+              archive.on('error', (err: Error) => {
+                reject(err);
+              });
+
+              archive.pipe(output);
+              archive.file(part1Path, { name: 'part1.mp4' });
+              archive.file(part2Path, { name: 'part2.mp4' });
+              archive.finalize();
+            })
+            .on('error', (err) => {
+              console.error('Error processing part 2:', err);
+              reject(err);
+            })
+            .run();
+        })
+        .on('error', (err) => {
+          console.error('Error processing part 1:', err);
+          reject(err);
+        })
+        .run();
+    });
+  });
+}
+
+// Process video endpoint
+app.post('/api/videos/:videoId/process', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const video = videoDatabase.find(v => v.id === videoId);
+
+    if (!video) {
+      return res.status(404).json({
+        success: false,
+        message: 'Video not found',
+        error: 'VIDEO_NOT_FOUND'
+      });
+    }
+
+    if (!fs.existsSync(video.path)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Video file not found on disk',
+        error: 'FILE_NOT_FOUND'
+      });
+    }
+
+    console.log('Starting video processing for:', videoId);
+    await processVideo(video.path, videoId);
+
+    res.json({
+      success: true,
+      message: 'Video processed successfully',
+      data: {
+        videoId,
+        downloadUrl: `/api/videos/${videoId}/download`
+      }
+    });
+  } catch (error) {
+    console.error('Video processing error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing video',
+      error: 'PROCESSING_FAILED'
+    });
+  }
+});
+
+// Download processed video endpoint
+app.get('/api/videos/:videoId/download', (req, res) => {
+  const { videoId } = req.params;
+  const zipPath = path.join(processedDir, videoId, 'processed.zip');
+
+  if (!fs.existsSync(zipPath)) {
+    return res.status(404).json({
+      success: false,
+      message: 'Processed video not found. Please process the video first.',
+      error: 'PROCESSED_FILE_NOT_FOUND'
+    });
+  }
+
+  const stat = fs.statSync(zipPath);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="video-${videoId}-processed.zip"`);
+  res.setHeader('Content-Length', stat.size);
+
+  const fileStream = fs.createReadStream(zipPath);
+  fileStream.pipe(res);
 });
 
 // Get video metadata
