@@ -36,7 +36,9 @@ function App() {
       <main className="main-content">
         <header className="header">
           <div className="logo-area">
-            <h1 className="logo">loop.fun</h1>
+            <div className="logo-container">
+              <h1 className="logo">loop.fun</h1>
+            </div>
             <div className="tagline">stuck in the loop</div>
           </div>
         </header>
