@@ -12,7 +12,8 @@ primary_region = 'iad'
   processes = ['app']
 
 [[vm]]
-  size = 'performance-4x'
+  size = 'shared-cpu-2x'
+  memory = "4gb"
   processes = ['app']
 
 [[statics]]
