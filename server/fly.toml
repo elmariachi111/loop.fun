@@ -1,0 +1,20 @@
+app = 'loopfun-api'
+primary_region = 'iad'
+
+[build]
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  processes = ['app']
+
+[[statics]]
+  guest_path = '/app/public'
+  url_prefix = '/public/'
