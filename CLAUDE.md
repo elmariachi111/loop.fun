@@ -1,1 +1,2 @@
 - At its base this project is a frontend application deployed on vercel. Its server directory contains a service that accepts video uploads. The server is deployed on fly.io.
+- The lint errors are in the compiled server output (server/dist/), not in the source code. These are configuration-related issues with the Node.js environment globals and should be addressed in the server's ESLint configuration or TypeScript compilation  settings, not in the frontend video processing code.

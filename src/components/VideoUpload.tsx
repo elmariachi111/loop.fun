@@ -15,11 +15,19 @@ interface UploadResponse {
   error?: string;
 }
 
+interface VideoSplit {
+  part1: Blob;
+  part2: Blob;
+  part1Name: string;
+  part2Name: string;
+}
+
 interface UploadState {
   uploading: boolean;
   progress: number;
   result: UploadResponse | null;
   error: string | null;
+  splitVideos: VideoSplit | null;
 }
 
 const VideoUpload = () => {
@@ -27,7 +35,8 @@ const VideoUpload = () => {
     uploading: false,
     progress: 0,
     result: null,
-    error: null
+    error: null,
+    splitVideos: null
   });
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,9 +82,113 @@ const VideoUpload = () => {
       setUploadState(prev => ({
         ...prev,
         error: null,
-        result: null
+        result: null,
+        splitVideos: null
       }));
     }
+  };
+
+  const splitVideoLocally = async (file: File): Promise<{ part1: Blob; part2: Blob }> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+        const midPoint = duration / 2;
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const stream = canvas.captureStream(30); // 30 FPS
+        
+        let part1Recorder: MediaRecorder;
+        let part2Recorder: MediaRecorder;
+        let part1Data: Blob[] = [];
+        let part2Data: Blob[] = [];
+        
+        // Record first half
+        const recordFirstHalf = () => {
+          part1Recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+          part1Data = [];
+          
+          part1Recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              part1Data.push(event.data);
+            }
+          };
+          
+          part1Recorder.onstop = () => {
+            const part1Blob = new Blob(part1Data, { type: 'video/webm' });
+            recordSecondHalf(part1Blob);
+          };
+          
+          video.currentTime = 0;
+          video.play();
+          part1Recorder.start();
+          
+          // Draw frames for first half
+          const drawFirstHalf = () => {
+            if (video.currentTime < midPoint && !video.ended) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              requestAnimationFrame(drawFirstHalf);
+            } else {
+              part1Recorder.stop();
+            }
+          };
+          drawFirstHalf();
+        };
+        
+        // Record second half
+        const recordSecondHalf = (part1Blob: Blob) => {
+          part2Recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+          part2Data = [];
+          
+          part2Recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              part2Data.push(event.data);
+            }
+          };
+          
+          part2Recorder.onstop = () => {
+            const part2Blob = new Blob(part2Data, { type: 'video/webm' });
+            resolve({ part1: part1Blob, part2: part2Blob });
+          };
+          
+          video.currentTime = midPoint;
+          video.play();
+          part2Recorder.start();
+          
+          // Draw frames for second half
+          const drawSecondHalf = () => {
+            if (!video.ended && video.currentTime < duration) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              requestAnimationFrame(drawSecondHalf);
+            } else {
+              part2Recorder.stop();
+            }
+          };
+          drawSecondHalf();
+        };
+        
+        recordFirstHalf();
+      };
+      
+      video.onerror = () => reject(new Error('Failed to load video'));
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleUpload = async () => {
@@ -84,100 +197,56 @@ const VideoUpload = () => {
     setUploadState(prev => ({
       ...prev,
       uploading: true,
-      processing: false,
       progress: 0,
       error: null,
-      result: null
+      result: null,
+      splitVideos: null
     }));
 
     try {
-      const formData = new FormData();
-      formData.append('video', selectedFile);
-
-      const xhr = new XMLHttpRequest();
-
-      // Track upload progress
-      xhr.upload.addEventListener('progress', (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          setUploadState(prev => ({
-            ...prev,
-            progress
-          }));
-        }
-      });
-
-      // Handle completion
-      xhr.addEventListener('load', () => {
-        try {
-          const response: UploadResponse = JSON.parse(xhr.responseText);
-          
-          if (xhr.status === 201 && response.success && response.data?.videoId) {
-            // Video uploaded and processed successfully
-            setUploadState(prev => ({
-              ...prev,
-              uploading: false,
-              processing: false,
-              result: response,
-              progress: 100
-            }));
-            
-            // Automatically trigger download
-            const downloadUrl = videoEndpoints.download(response.data.videoId);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `video-${response.data.videoId}-processed.zip`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // Reset file input
-            setSelectedFile(null);
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-            }
-          } else {
-            setUploadState(prev => ({
-              ...prev,
-              uploading: false,
-              processing: false,
-              error: response.message || 'Upload failed',
-              progress: 0
-            }));
+      setUploadState(prev => ({ ...prev, progress: 20 }));
+      
+      const { part1, part2 } = await splitVideoLocally(selectedFile);
+      
+      setUploadState(prev => ({ ...prev, progress: 80 }));
+      
+      // Generate filenames based on original file
+      const baseName = selectedFile.name.replace(/\.[^/.]+$/, "");
+      const part1Name = `${baseName}_part1.webm`;
+      const part2Name = `${baseName}_part2.webm`;
+      
+      // Store both parts in state instead of auto-downloading
+      setUploadState(prev => ({
+        ...prev,
+        uploading: false,
+        progress: 100,
+        splitVideos: {
+          part1,
+          part2,
+          part1Name,
+          part2Name
+        },
+        result: {
+          success: true,
+          message: 'Video split successfully!',
+          data: {
+            videoId: 'local-split',
+            filename: selectedFile.name,
+            originalName: selectedFile.name,
+            mimeType: selectedFile.type,
+            size: selectedFile.size,
+            uploadedAt: new Date().toISOString()
           }
-        } catch (parseError) {
-          setUploadState(prev => ({
-            ...prev,
-            uploading: false,
-            processing: false,
-            error: 'Invalid response from server',
-            progress: 0
-          }));
         }
-      });
-
-      // Handle errors
-      xhr.addEventListener('error', () => {
-        setUploadState(prev => ({
-          ...prev,
-          uploading: false,
-          processing: false,
-          error: 'Network error during upload',
-          progress: 0
-        }));
-      });
-
-      // Start upload
-      xhr.open('POST', videoEndpoints.upload());
-      xhr.send(formData);
-
+      }));
+      
     } catch (error) {
       setUploadState(prev => ({
         ...prev,
         uploading: false,
-        processing: false,
-        error: error instanceof Error ? error.message : 'Upload failed',
-        progress: 0
+        error: error instanceof Error ? error.message : 'Video splitting failed',
+        progress: 0,
+        splitVideos: null
       }));
     }
   };
@@ -197,7 +266,7 @@ const VideoUpload = () => {
   return (
     <div className="video-upload">
       <div className="upload-section">
-        <h3>📹 Upload Video</h3>
+        <h3>📹 Split Video</h3>
         
         <div className="file-input-wrapper">
           <input
@@ -230,7 +299,7 @@ const VideoUpload = () => {
                 style={{ width: `${uploadState.progress}%` }}
               />
             </div>
-            <p className="progress-text">Uploading & Processing: {uploadState.progress}%</p>
+            <p className="progress-text">Splitting Video: {uploadState.progress}%</p>
           </div>
         )}
 
@@ -239,7 +308,7 @@ const VideoUpload = () => {
           disabled={!selectedFile || uploadState.uploading}
           className="upload-btn"
         >
-          {uploadState.uploading ? 'Processing Video...' : 'Upload & Process Video'}
+          {uploadState.uploading ? 'Splitting Video...' : 'Split Video Into Two Parts'}
         </button>
 
         {uploadState.error && (
@@ -248,14 +317,50 @@ const VideoUpload = () => {
           </div>
         )}
 
-        {uploadState.result && uploadState.result.success && (
+        {uploadState.result && uploadState.result.success && uploadState.splitVideos && (
           <div className="success-message">
-            <h4>✅ Video Processed Successfully!</h4>
-            <p>Your video has been split into two parts and the ZIP file should download automatically.</p>
+            <h4>✅ Video Split Successfully!</h4>
+            <p>Your video has been split into two parts. Click the buttons below to download each part:</p>
+            
+            <div className="download-section">
+              <div className="download-buttons">
+                <button 
+                  onClick={() => downloadBlob(uploadState.splitVideos!.part1, uploadState.splitVideos!.part1Name)}
+                  className="download-btn part1-btn"
+                >
+                  📥 Download Part 1
+                </button>
+                <button 
+                  onClick={() => downloadBlob(uploadState.splitVideos!.part2, uploadState.splitVideos!.part2Name)}
+                  className="download-btn part2-btn"
+                >
+                  📥 Download Part 2
+                </button>
+              </div>
+              
+              <div className="file-info">
+                <p><strong>Part 1:</strong> {uploadState.splitVideos.part1Name}</p>
+                <p><strong>Part 2:</strong> {uploadState.splitVideos.part2Name}</p>
+              </div>
+            </div>
+            
             <div className="upload-details">
               <p><strong>Original Name:</strong> {uploadState.result.data?.originalName}</p>
               <p><strong>File Size:</strong> {uploadState.result.data?.size ? formatFileSize(uploadState.result.data.size) : 'Unknown'}</p>
             </div>
+            
+            <button 
+              onClick={() => {
+                setUploadState(prev => ({ ...prev, result: null, splitVideos: null }));
+                setSelectedFile(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+              className="new-video-btn"
+            >
+              🎬 Split Another Video
+            </button>
           </div>
         )}
       </div>
