@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { videoEndpoints } from '../config/api';
+import './VideoUpload.css';
 
 interface UploadResponse {
   success: boolean;
@@ -45,7 +46,8 @@ const VideoUpload = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [numberOfParts, setNumberOfParts] = useState<number>(2);
   const [videoUrls, setVideoUrls] = useState<string[]>([]);
-  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const [activeTab, setActiveTab] = useState<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const ffmpegRef = useRef<FFmpeg>(new FFmpeg());
 
   // Initialize FFmpeg
@@ -89,10 +91,12 @@ const VideoUpload = () => {
     if (uploadState.splitVideos) {
       const urls = uploadState.splitVideos.parts.map(part => URL.createObjectURL(part));
       setVideoUrls(urls);
+      setActiveTab(0); // Reset to first tab
     } else {
       // Clean up previous URLs
       videoUrls.forEach(url => URL.revokeObjectURL(url));
       setVideoUrls([]);
+      setActiveTab(0);
     }
   }, [uploadState.splitVideos]);
 
@@ -381,6 +385,13 @@ const VideoUpload = () => {
           </div>
         )}
 
+        <div className="privacy-notice">
+          <div className="privacy-icon">🔒</div>
+          <p className="privacy-text">
+            <strong>Your privacy, preserved.</strong> All video processing happens entirely within your browser—your content never touches our servers or leaves your device.
+          </p>
+        </div>
+
         <button
           onClick={handleUpload}
           disabled={!selectedFile || uploadState.uploading || uploadState.ffmpegLoading}
@@ -405,32 +416,43 @@ const VideoUpload = () => {
             <p>Your video has been split into {uploadState.splitVideos.parts.length} parts. Preview and download each part below:</p>
             
             <div className="video-preview-section">
-              <div className="video-frames">
-                {uploadState.splitVideos.parts.map((part, index) => (
-                  <div key={index} className="video-frame">
-                    <h5>Part {index + 1}</h5>
+              <div className="video-tabs">
+                <div className="tab-header">
+                  {uploadState.splitVideos.parts.map((_, index) => (
+                    <button
+                      key={index}
+                      className={`tab-button ${activeTab === index ? 'active' : ''}`}
+                      onClick={() => setActiveTab(index)}
+                    >
+                      Part {index + 1}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="tab-content">
+                  <div className="video-player-container">
                     <video
-                      ref={(el) => {
-                        if (videoRefs.current) {
-                          videoRefs.current[index] = el;
-                        }
-                      }}
-                      src={videoUrls[index]}
+                      ref={videoRef}
+                      src={videoUrls[activeTab]}
                       controls
-                      autoPlay={index === 0} // Only autoplay first video
+                      autoPlay
                       muted
                       loop
                       className="preview-video"
+                      key={activeTab} // Force re-render when tab changes
                     />
-                    <button 
-                      onClick={() => downloadBlob(part, uploadState.splitVideos!.partNames[index])}
-                      className={`download-btn part${index + 1}-btn`}
-                    >
-                      📥 Download Part {index + 1}
-                    </button>
-                    <p className="file-name">{uploadState.splitVideos.partNames[index]}</p>
+                    
+                    <div className="video-controls">
+                      <button 
+                        onClick={() => downloadBlob(uploadState.splitVideos!.parts[activeTab], uploadState.splitVideos!.partNames[activeTab])}
+                        className="download-btn"
+                      >
+                        📥 Download Part {activeTab + 1}
+                      </button>
+                      <p className="file-name">{uploadState.splitVideos.partNames[activeTab]}</p>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
             
