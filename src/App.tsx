@@ -1,6 +1,6 @@
 import './App.css'
 
-function App(): JSX.Element {
+function App() {
   return (
     <div className="app">
       <nav className="sidebar">
@@ -35,7 +35,7 @@ function App(): JSX.Element {
         <header className="header">
           <div className="logo-area">
             <h1 className="logo">loop.fun</h1>
-            <div className="tagline">// where noobs become hackers</div>
+            <div className="tagline">stuck in the loop</div>
           </div>
         </header>
         
@@ -55,7 +55,7 @@ function App(): JSX.Element {
         <div className="footer-content">
           <div className="future-text">
             <p>🌈 THE FUTURE IS BRIGHT 🌈</p>
-            <p>Where unicorns code and rainbows compile</p>
+            <p>The ticker is loop.</p>
             <div className="rainbow-bar"></div>
           </div>
           <div className="footer-links">
