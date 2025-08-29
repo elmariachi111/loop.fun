@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { videoEndpoints } from '../config/api';
 
 interface UploadResponse {
@@ -41,6 +41,32 @@ const VideoUpload = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [videoUrls, setVideoUrls] = useState<{ part1Url?: string; part2Url?: string }>({});
+  const part1VideoRef = useRef<HTMLVideoElement>(null);
+  const part2VideoRef = useRef<HTMLVideoElement>(null);
+
+  // Cleanup object URLs when component unmounts or when splitVideos changes
+  useEffect(() => {
+    return () => {
+      if (videoUrls.part1Url) URL.revokeObjectURL(videoUrls.part1Url);
+      if (videoUrls.part2Url) URL.revokeObjectURL(videoUrls.part2Url);
+    };
+  }, [videoUrls]);
+
+  // Create object URLs when splitVideos is updated
+  useEffect(() => {
+    if (uploadState.splitVideos) {
+      const part1Url = URL.createObjectURL(uploadState.splitVideos.part1);
+      const part2Url = URL.createObjectURL(uploadState.splitVideos.part2);
+      setVideoUrls({ part1Url, part2Url });
+    } else {
+      // Clean up previous URLs
+      if (videoUrls.part1Url) URL.revokeObjectURL(videoUrls.part1Url);
+      if (videoUrls.part2Url) URL.revokeObjectURL(videoUrls.part2Url);
+      setVideoUrls({});
+    }
+  }, [uploadState.splitVideos]);
+
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -108,10 +134,11 @@ const VideoUpload = () => {
         let part1Data: Blob[] = [];
         let part2Data: Blob[] = [];
         
-        // Record first half
+        // Record first half with ping-pong effect
         const recordFirstHalf = () => {
           part1Recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
           part1Data = [];
+          let isReverse = false;
           
           part1Recorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
@@ -128,22 +155,41 @@ const VideoUpload = () => {
           video.play();
           part1Recorder.start();
           
-          // Draw frames for first half
+          // Draw frames for first half - forward then backward
           const drawFirstHalf = () => {
-            if (video.currentTime < midPoint && !video.ended) {
+            if (!isReverse) {
+              // Forward playback
+              if (video.currentTime < midPoint && !video.ended) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                requestAnimationFrame(drawFirstHalf);
+              } else {
+                // Switch to reverse
+                isReverse = true;
+                video.currentTime = midPoint - 0.033; // Start slightly before end
+                video.pause();
+                drawReverse();
+              }
+            }
+          };
+          
+          const drawReverse = () => {
+            if (video.currentTime > 0) {
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              requestAnimationFrame(drawFirstHalf);
+              video.currentTime -= 0.033; // Go backward at ~30fps
+              requestAnimationFrame(drawReverse);
             } else {
               part1Recorder.stop();
             }
           };
+          
           drawFirstHalf();
         };
         
-        // Record second half
+        // Record second half with ping-pong effect
         const recordSecondHalf = (part1Blob: Blob) => {
           part2Recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
           part2Data = [];
+          let isReverse = false;
           
           part2Recorder.ondataavailable = (event) => {
             if (event.data.size > 0) {
@@ -157,18 +203,58 @@ const VideoUpload = () => {
           };
           
           video.currentTime = midPoint;
-          video.play();
-          part2Recorder.start();
+          video.pause(); // Make sure video is paused during seek
           
-          // Draw frames for second half
+          // Wait for the video to seek to the midpoint and load the frame
+          const startSecondHalf = () => {
+            // Double-check we're at the right position
+            if (Math.abs(video.currentTime - midPoint) > 0.1) {
+              video.currentTime = midPoint;
+              setTimeout(startSecondHalf, 50);
+              return;
+            }
+            
+            // Draw the first frame at midpoint before starting recording
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            video.play();
+            part2Recorder.start();
+            drawSecondHalf();
+          };
+          
+          video.onseeked = () => {
+            video.onseeked = null;
+            // Small delay to ensure frame is loaded
+            setTimeout(startSecondHalf, 100);
+          };
+          
+          // Draw frames for second half - forward then backward  
           const drawSecondHalf = () => {
-            if (!video.ended && video.currentTime < duration) {
+            if (!isReverse) {
+              // Forward playback
+              if (!video.ended && video.currentTime < duration - 0.033) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                requestAnimationFrame(drawSecondHalf);
+              } else {
+                // Switch to reverse
+                isReverse = true;
+                video.currentTime = duration - 0.033; // Start slightly before end
+                video.pause();
+                drawReverseSecond();
+              }
+            }
+          };
+          
+          const drawReverseSecond = () => {
+            if (video.currentTime > midPoint) {
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              requestAnimationFrame(drawSecondHalf);
+              video.currentTime -= 0.033; // Go backward at ~30fps
+              requestAnimationFrame(drawReverseSecond);
             } else {
               part2Recorder.stop();
             }
           };
+          
           drawSecondHalf();
         };
         
@@ -320,27 +406,48 @@ const VideoUpload = () => {
         {uploadState.result && uploadState.result.success && uploadState.splitVideos && (
           <div className="success-message">
             <h4>✅ Video Split Successfully!</h4>
-            <p>Your video has been split into two parts. Click the buttons below to download each part:</p>
+            <p>Your video has been split into two parts. Preview and download each part below:</p>
             
-            <div className="download-section">
-              <div className="download-buttons">
-                <button 
-                  onClick={() => downloadBlob(uploadState.splitVideos!.part1, uploadState.splitVideos!.part1Name)}
-                  className="download-btn part1-btn"
-                >
-                  📥 Download Part 1
-                </button>
-                <button 
-                  onClick={() => downloadBlob(uploadState.splitVideos!.part2, uploadState.splitVideos!.part2Name)}
-                  className="download-btn part2-btn"
-                >
-                  📥 Download Part 2
-                </button>
-              </div>
-              
-              <div className="file-info">
-                <p><strong>Part 1:</strong> {uploadState.splitVideos.part1Name}</p>
-                <p><strong>Part 2:</strong> {uploadState.splitVideos.part2Name}</p>
+            <div className="video-preview-section">
+              <div className="video-frames">
+                <div className="video-frame">
+                  <h5>Part 1 (First Half)</h5>
+                  <video
+                    ref={part1VideoRef}
+                    src={videoUrls.part1Url}
+                    controls
+                    autoPlay
+                    muted
+                    loop
+                    className="preview-video"
+                  />
+                  <button 
+                    onClick={() => downloadBlob(uploadState.splitVideos!.part1, uploadState.splitVideos!.part1Name)}
+                    className="download-btn part1-btn"
+                  >
+                    📥 Download Part 1
+                  </button>
+                  <p className="file-name">{uploadState.splitVideos.part1Name}</p>
+                </div>
+                
+                <div className="video-frame">
+                  <h5>Part 2 (Second Half)</h5>
+                  <video
+                    ref={part2VideoRef}
+                    src={videoUrls.part2Url}
+                    controls
+                    muted
+                    loop
+                    className="preview-video"
+                  />
+                  <button 
+                    onClick={() => downloadBlob(uploadState.splitVideos!.part2, uploadState.splitVideos!.part2Name)}
+                    className="download-btn part2-btn"
+                  >
+                    📥 Download Part 2
+                  </button>
+                  <p className="file-name">{uploadState.splitVideos.part2Name}</p>
+                </div>
               </div>
             </div>
             
