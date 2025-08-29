@@ -1,0 +1,13 @@
+# Ignore server directory for frontend deployment
+server/
+server/**
+uploads/
+*.log
+node_modules/.cache/
+
+# Ignore development files
+.env.local
+.env.development
+
+# Ignore build artifacts from server
+server/dist/

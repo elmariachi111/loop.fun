@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite\" \"npm run server:dev\"",
-    "build": "vite build && npm run server:build",
+    "build": "vite build",
+    "build:full": "vite build && npm run server:build",
     "lint": "eslint .",
     "preview": "vite preview",
     "server:dev": "nodemon --exec \"node --import tsx\" server/app.ts",

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { videoEndpoints } from '../config/api';
 
 interface UploadResponse {
   success: boolean;
@@ -152,7 +153,7 @@ const VideoUpload = () => {
       });
 
       // Start upload
-      xhr.open('POST', 'http://localhost:3001/api/videos/upload');
+      xhr.open('POST', videoEndpoints.upload());
       xhr.send(formData);
 
     } catch (error) {

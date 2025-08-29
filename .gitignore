@@ -42,3 +42,7 @@ uploads/
 
 # Server build output
 server/dist/
+server/node_modules/
+
+# Vercel
+.vercel
