@@ -37,17 +37,17 @@ const videoMimeTypes = [
 
 // Multer configuration for streaming video uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     const uniqueId = uuidv4();
     const extension = path.extname(file.originalname);
     cb(null, `${uniqueId}${extension}`);
   }
 });
 
-const fileFilter = (req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const fileFilter = (_req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   if (videoMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -98,7 +98,7 @@ const videoDatabase: VideoMetadata[] = [];
 // Routes
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
@@ -240,7 +240,7 @@ app.get('/api/videos/:videoId/stream', (req, res) => {
 });
 
 // List all videos
-app.get('/api/videos', (req, res) => {
+app.get('/api/videos', (_req, res) => {
   const videos = videoDatabase.map(video => ({
     videoId: video.id,
     filename: video.filename,
@@ -287,7 +287,7 @@ app.delete('/api/videos/:videoId', (req, res) => {
 });
 
 // Error handling middleware
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({
@@ -322,7 +322,7 @@ app.use((error: any, req: express.Request, res: express.Response, next: express.
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use('*', (_req, res) => {
   res.status(404).json({
     success: false,
     message: 'Endpoint not found',
